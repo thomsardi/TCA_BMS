@@ -185,7 +185,7 @@ class bq769x0 {
     int _dataCell[3];
     bool _isBalancingProtectionEnabled = false;
     void (*_listener) (uint8_t) = 0;
-    byte _bootPin = -1;
+    byte _bootPin;
     byte _alertPin;
 
     // Methods

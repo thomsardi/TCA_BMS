@@ -144,7 +144,7 @@ int bq769x0::begin(byte alertPin, byte bootPin)
   }
   
   // Boot IC if pin is defined (else: manual boot via push button has to be done before calling this method)
-  if (bootPin >= 0)
+  if (_bootPin >= 0)
   {
     wake();
     
@@ -170,7 +170,7 @@ int bq769x0::begin(byte alertPin, byte bootPin)
 
     // attach ALERT interrupt to this instance
     instancePointer = this;
-    attachInterrupt(digitalPinToInterrupt(alertPin), bq769x0::alertISR, RISING);
+    attachInterrupt(digitalPinToInterrupt(_alertPin), bq769x0::alertISR, RISING);
 
     // get ADC offset and gain
     adcOffset = (signed int) readRegister(ADCOFFSET);  // convert from 2's complement
@@ -193,6 +193,10 @@ int bq769x0::begin(byte alertPin, byte bootPin, void (*listener) (uint8_t))
 {
   // Wire.begin();        // join I2C bus
   _listener = listener;
+  _bootPin = bootPin;
+  Serial.println("Boot Pin = " + String(_bootPin));
+  _alertPin = alertPin;
+  Serial.println("Alert Pin = " + String(_alertPin));
   if (_listener > 0)
   {
     _listener(_channel);
@@ -204,7 +208,7 @@ int bq769x0::begin(byte alertPin, byte bootPin, void (*listener) (uint8_t))
   }
   
   // Boot IC if pin is defined (else: manual boot via push button has to be done before calling this method)
-  if (bootPin >= 0)
+  if (_bootPin >= 0)
   {
     wake();
 
@@ -229,7 +233,7 @@ int bq769x0::begin(byte alertPin, byte bootPin, void (*listener) (uint8_t))
 
     // attach ALERT interrupt to this instance
     instancePointer = this;
-    attachInterrupt(digitalPinToInterrupt(alertPin), bq769x0::alertISR, RISING);
+    attachInterrupt(digitalPinToInterrupt(_alertPin), bq769x0::alertISR, RISING);
 
     // get ADC offset and gain
     adcOffset = (signed int) readRegister(ADCOFFSET);  // convert from 2's complement
@@ -1036,9 +1040,7 @@ bool bq769x0::posCheckInShortingPins(int pos, int data, int shortingPinConfigura
 }
 
 /**
- * if the pos is in shorting pins, this method will check before the first shorting pins and after the last shorting pins
- * it will also check if any of the active pin in shorting pin. It will bitwise AND every of them, if one of them is not valid
- * it will return 0, otherwise return 1
+ * if the pos is in normal position, it will only check on adjacent pin, after pos and before pos
  */
 bool bq769x0::posCheckNormalPins(int pos, int data)
 {

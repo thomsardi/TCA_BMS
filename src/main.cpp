@@ -10,6 +10,7 @@
 #define BMS_I2C_ADDRESS 0x08
 
 bq769x0 BMS(bq76940, BMS_I2C_ADDRESS, 7);
+bq769x0 BMS2(bq76940, BMS_I2C_ADDRESS, 6);
 bool isFinish = false;
 String command;
 uint8_t myData;
@@ -133,6 +134,37 @@ void cekBms()
 
 }
 
+
+void cekBms2()
+{
+  BMS2.update();
+  delay(100);
+  for (int i = 0; i < 3; i++)
+  {
+    Serial.print("Temperature Cell " + String(i+1) + " = ");
+    Serial.println(String(BMS2.getTemperatureDegC(i+1)));
+  }
+  // BMS.writeReg(0x01, 2);
+  // delay(500);
+  // int data = BMS.readReg(0x01);
+  // Serial.println("CELLBALL 2 = " + String(data));
+  // delay(100);
+  int data = BMS2.readReg(SYS_STAT);
+  delay(100);
+  BMS2.writeReg(SYS_STAT, data);
+  delay(100);
+  Serial.print("SYS_STAT 2 = ");
+  Serial.println(data, BIN);
+  // Serial.println("test");
+  // for (int i = 1; i < 16; i++)
+  // {
+  //   int cellVoltage = BMS.getCellVoltage(i);
+  //   Serial.println("Battery Voltage " + String(i) + " = " + String(cellVoltage));
+  // }
+
+}
+
+
 void parsingString(String command, char delimiter)
 {
   int delimiterIndex = command.indexOf(',');
@@ -161,9 +193,14 @@ void parsingString(String command, char delimiter)
 void checkCommand(String command)
 {
   Serial.println("Reading command..");
-  if (command == "write")
+  if (command == "write1")
   {
-    Serial.println("writing");
+    BMS.writeReg(CELLBAL1,0);
+    // Serial.println(BMS.readReg(CELLBAL1));
+  }
+  if (command == "write2")
+  {
+    BMS2.writeReg(CELLBAL2,0);
   }
   if (command.indexOf("balancing") >= 0)
   {
@@ -223,12 +260,20 @@ void checkCommand(String command)
   }
   if (command == "read")
   {
+    Serial.println("=========BMS 1============");
     Serial.print("CELLBAL1 = ");
     Serial.println(BMS.readReg(CELLBAL1));
     Serial.print("CELLBAL2 = ");
     Serial.println(BMS.readReg(CELLBAL2));
     Serial.print("CELLBAL3 = ");
     Serial.println(BMS.readReg(CELLBAL3));
+    Serial.println("=========BMS 2============");
+    Serial.print("CELLBAL1 = ");
+    Serial.println(BMS2.readReg(CELLBAL1));
+    Serial.print("CELLBAL2 = ");
+    Serial.println(BMS2.readReg(CELLBAL2));
+    Serial.print("CELLBAL3 = ");
+    Serial.println(BMS2.readReg(CELLBAL3));  
   }
   if (command == "shutdown")
   {
@@ -245,7 +290,10 @@ void checkCommand(String command)
   {
     cekBms();
   }
-
+  if (command == "cekbms2")
+  {
+    cekBms2();
+  }
 }
 
 
@@ -255,13 +303,17 @@ void setup() {
   FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);
   Serial.begin(115200);
   Wire.begin();
-  if (isFinish)
+  if (!isFinish)
   {
     Scanner();
   }
-  
+  // Serial.println("AAAAAAAAAAAAAAAAAAAAAAAA");
   int err = BMS.begin(BMS_ALERT_PIN, BMS_BOOT_PIN, &TCA9548A);
+  int err2 = BMS2.begin(BMS_ALERT_PIN, BMS_BOOT_PIN, &TCA9548A);
+  
+  
   BMS.setCellConfiguration(BMS.CELL_10);
+  BMS2.setCellConfiguration(BMS2.CELL_10);
 
   // BMS.setTemperatureLimits(-20, 45, 0, 45);
   // BMS.setShuntResistorValue(5);
@@ -278,15 +330,23 @@ void setup() {
 
   delay(100);
   int data = BMS.readReg(SYS_STAT);
-  Serial.print("SYS_STAT = ");
+  int data2 = BMS2.readReg(SYS_STAT);
+  Serial.print("SYS_STAT 1 = ");
   Serial.println(data, BIN);
+  Serial.print("SYS_STAT 2 = ");
+  Serial.println(data2, BIN);
   delay(100);
-  Serial.println("Clearing SYS_STAT");
+  Serial.println("Clearing SYS_STAT 1");
   BMS.writeReg(SYS_STAT, data);
+  Serial.println("Clearing SYS_STAT 2");
+  BMS2.writeReg(SYS_STAT, data2);
   delay(100);
   data = BMS.readReg(SYS_STAT);
-  Serial.print("SYS_STAT = ");
+  Serial.print("SYS_STAT 1 = ");
   Serial.println(data, BIN);
+  data = BMS2.readReg(SYS_STAT);
+  Serial.print("SYS_STAT 2 = ");
+  Serial.println(data2, BIN);
   delay(100);
   
 }
@@ -299,6 +359,8 @@ void test()
 void loop() {
   // Scanner();
   // cekBms();
+  // Serial.println("BBBBBBBBBBBBBBBBBBBBBB");
+  // Scanner();
   if (serialRead())
   {
     Serial.println(command);
