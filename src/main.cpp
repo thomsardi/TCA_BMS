@@ -13,10 +13,7 @@ bq769x0 BMS(bq76940, BMS_I2C_ADDRESS, 7);
 bq769x0 BMS2(bq76940, BMS_I2C_ADDRESS, 6);
 bool isFinish = false;
 String command;
-uint8_t myData;
-
-
-
+TwoWire wire = TwoWire(0);
 
 // How many leds in your strip?
 #define NUM_LEDS 8
@@ -31,14 +28,12 @@ uint8_t myData;
 // Define the array of leds
 CRGB leds[NUM_LEDS];
 
-int x = 1;
-
 int cellBalAddr, cellBalBitPos, cellBalState;
 
 void TCA9548A(uint8_t bus){
-  Wire.beginTransmission(0x70);  // TCA9548A address
-  Wire.write(1 << bus);          // send byte to select bus
-  Wire.endTransmission();
+  wire.beginTransmission(0x70);  // TCA9548A address
+  wire.write(1 << bus);          // send byte to select bus
+  wire.endTransmission();
   // Serial.print(bus);
 }
 
@@ -85,12 +80,10 @@ void Scanner ()
   Serial.println ();
   Serial.println ("I2C scanner. Scanning ...");
   byte count = 0;
-
-  Wire.begin();
   for (byte i = 8; i < 120; i++)
   {
-    Wire.beginTransmission (i);          // Begin I2C transmission Address (i)
-    if (Wire.endTransmission () == 0)  // Receive 0 = success (ACK response)
+    wire.beginTransmission (i);          // Begin I2C transmission Address (i)
+    if (wire.endTransmission () == 0)  // Receive 0 = success (ACK response)
     {
       Serial.print ("Found address: ");
       Serial.print (i, DEC);
@@ -108,60 +101,30 @@ void Scanner ()
 void cekBms()
 {
   BMS.update();
-  delay(100);
   for (int i = 0; i < 3; i++)
   {
     Serial.print("Temperature Cell " + String(i+1) + " = ");
     Serial.println(String(BMS.getTemperatureDegC(i+1)));
   }
-  // BMS.writeReg(0x01, 2);
-  // delay(500);
-  // int data = BMS.readReg(0x01);
-  // Serial.println("CELLBALL 2 = " + String(data));
-  // delay(100);
   int data = BMS.readReg(SYS_STAT);
-  delay(100);
   BMS.writeReg(SYS_STAT, data);
-  delay(100);
   Serial.print("SYS_STAT = ");
   Serial.println(data, BIN);
-  // Serial.println("test");
-  // for (int i = 1; i < 16; i++)
-  // {
-  //   int cellVoltage = BMS.getCellVoltage(i);
-  //   Serial.println("Battery Voltage " + String(i) + " = " + String(cellVoltage));
-  // }
-
 }
 
 
 void cekBms2()
 {
   BMS2.update();
-  delay(100);
   for (int i = 0; i < 3; i++)
   {
     Serial.print("Temperature Cell " + String(i+1) + " = ");
     Serial.println(String(BMS2.getTemperatureDegC(i+1)));
   }
-  // BMS.writeReg(0x01, 2);
-  // delay(500);
-  // int data = BMS.readReg(0x01);
-  // Serial.println("CELLBALL 2 = " + String(data));
-  // delay(100);
   int data = BMS2.readReg(SYS_STAT);
-  delay(100);
   BMS2.writeReg(SYS_STAT, data);
-  delay(100);
   Serial.print("SYS_STAT 2 = ");
   Serial.println(data, BIN);
-  // Serial.println("test");
-  // for (int i = 1; i < 16; i++)
-  // {
-  //   int cellVoltage = BMS.getCellVoltage(i);
-  //   Serial.println("Battery Voltage " + String(i) + " = " + String(cellVoltage));
-  // }
-
 }
 
 
@@ -184,10 +147,6 @@ void parsingString(String command, char delimiter)
   {
     cellBalState = 1;
   }
-  // Serial.println("Cell Bal Addr = " + String(cellBalAddr));
-  // Serial.println("Cell Bal Bit Pos = " + String(cellBalBitPos));
-  // Serial.println("Cell Bal State = " + String(cellBalState));
-
 }
 
 void checkCommand(String command)
@@ -195,10 +154,17 @@ void checkCommand(String command)
   Serial.println("Reading command..");
   if (command == "write1")
   {
-    BMS.writeReg(CELLBAL1,0);
-    // Serial.println(BMS.readReg(CELLBAL1));
+    BMS.writeReg(CELLBAL1,1);
   }
   if (command == "write2")
+  {
+    BMS2.writeReg(CELLBAL2,1);
+  }
+    if (command == "clear1")
+  {
+    BMS.writeReg(CELLBAL1,0);
+  }
+  if (command == "clear2")
   {
     BMS2.writeReg(CELLBAL2,0);
   }
@@ -206,19 +172,11 @@ void checkCommand(String command)
   {
     parsingString(command, ',');
     BMS.enableBalancingProtection();
-    // Test On WS2812 Led
     BMS.setBalanceSwitch(cellBalAddr, cellBalBitPos, cellBalState);
     BMS.updateBalanceSwitches();
     Serial.println(BMS.getDataCell(cellBalAddr));
+    // Test On WS2812 Led
     dataToLed(leds, BMS.getDataCell(cellBalAddr), 8);
-
-    // Serial.print("Balancing Status = ");
-    // Serial.println(BMS.setBalanceSwitch(cellBalAddr, cellBalBitPos, cellBalState)); //Valid
-    // Serial.println("Cell Bal Addr = " + String(cellBalAddr));
-    // BMS.updateBalanceSwitches();
-    // delay(500);
-    // Serial.print("CellBal = ");
-    // Serial.println(BMS.readReg(cellBalAddr));
   }
 
   if (command.indexOf("testbal") >= 0)
@@ -302,12 +260,14 @@ void setup() {
   // put your setup code here, to run once:
   FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);
   Serial.begin(115200);
-  Wire.begin();
+  wire.setPins(21,22);
+  wire.begin();
+  BMS.setI2C(&wire);
+  BMS2.setI2C(&wire);
   if (!isFinish)
   {
     Scanner();
   }
-  // Serial.println("AAAAAAAAAAAAAAAAAAAAAAAA");
   int err = BMS.begin(BMS_ALERT_PIN, BMS_BOOT_PIN, &TCA9548A);
   int err2 = BMS2.begin(BMS_ALERT_PIN, BMS_BOOT_PIN, &TCA9548A);
   
@@ -327,27 +287,22 @@ void setup() {
   // BMS.setIdleCurrentThreshold(100);
   // BMS.enableAutoBalancing();
   // BMS.enableDischarging();
-
-  delay(100);
   int data = BMS.readReg(SYS_STAT);
   int data2 = BMS2.readReg(SYS_STAT);
   Serial.print("SYS_STAT 1 = ");
   Serial.println(data, BIN);
   Serial.print("SYS_STAT 2 = ");
   Serial.println(data2, BIN);
-  delay(100);
   Serial.println("Clearing SYS_STAT 1");
   BMS.writeReg(SYS_STAT, data);
   Serial.println("Clearing SYS_STAT 2");
   BMS2.writeReg(SYS_STAT, data2);
-  delay(100);
   data = BMS.readReg(SYS_STAT);
   Serial.print("SYS_STAT 1 = ");
   Serial.println(data, BIN);
   data = BMS2.readReg(SYS_STAT);
   Serial.print("SYS_STAT 2 = ");
   Serial.println(data2, BIN);
-  delay(100);
   
 }
 
@@ -357,26 +312,16 @@ void test()
 }
 
 void loop() {
+
+  // put your main code here, to run repeatedly:
   // Scanner();
   // cekBms();
-  // Serial.println("BBBBBBBBBBBBBBBBBBBBBB");
-  // Scanner();
   if (serialRead())
   {
     Serial.println(command);
     checkCommand(command);
     command = "";
   }
-  // put your main code here, to run repeatedly:
-  //Serial.println("abc");
-  /*
-  if (serialRead())
-  {
-    Serial.print("incoming String = ");
-    Serial.println(command);
-    checkCommand(command);
-    command = "";
-  }
-  */
+  
 }
 

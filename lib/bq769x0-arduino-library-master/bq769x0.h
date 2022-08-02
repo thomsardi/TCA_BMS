@@ -107,6 +107,7 @@ class bq769x0 {
 	void setAlertInterruptFlag(void);
 
     // custom method
+    void setI2C(TwoWire *wire);
     bool setBalanceSwitch(uint8_t cellBal, uint8_t pos, bool switchState);
     bool setBalanceSwitches(uint8_t cellBal, uint8_t switchState);
     void clearBalanceSwitches();
@@ -187,6 +188,7 @@ class bq769x0 {
     void (*_listener) (uint8_t) = 0;
     byte _bootPin;
     byte _alertPin;
+    TwoWire* _wire;
 
     // Methods
     bool determineAddressAndCrc(void);

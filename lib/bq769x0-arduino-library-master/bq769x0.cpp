@@ -129,6 +129,10 @@ bq769x0::bq769x0(byte bqType, int bqI2CAddress, uint8_t channel)
   disableBalancingProtection();
 }
 
+void bq769x0::setI2C(TwoWire *wire)
+{
+  _wire = wire;
+}
 
 //-----------------------------------------------------------------------------
 
@@ -143,18 +147,14 @@ int bq769x0::begin(byte alertPin, byte bootPin)
     cellVoltages[i] = 0;
   }
   
-  // Boot IC if pin is defined (else: manual boot via push button has to be done before calling this method)
-  if (_bootPin >= 0)
+  if (_wire <= 0)
   {
-    wake();
-    
-    // pinMode(bootPin, OUTPUT);
-    // digitalWrite(bootPin, HIGH);
-    // delay(5);   // wait 5 ms for device to receive boot signal (datasheet: max. 2 ms)
-    // pinMode(bootPin, INPUT);     // don't disturb temperature measurement
-    // delay(10);  // wait for device to boot up completely (datasheet: max. 10 ms)
-  
+    Serial.println("BMS I2C pin not defined");
+    return 1;
   }
+
+  // Boot IC if pin is defined (else: manual boot via push button has to be done before calling this method)
+  wake();
  
   if (determineAddressAndCrc())
   {
@@ -194,9 +194,7 @@ int bq769x0::begin(byte alertPin, byte bootPin, void (*listener) (uint8_t))
   // Wire.begin();        // join I2C bus
   _listener = listener;
   _bootPin = bootPin;
-  Serial.println("Boot Pin = " + String(_bootPin));
   _alertPin = alertPin;
-  Serial.println("Alert Pin = " + String(_alertPin));
   if (_listener > 0)
   {
     _listener(_channel);
@@ -208,16 +206,7 @@ int bq769x0::begin(byte alertPin, byte bootPin, void (*listener) (uint8_t))
   }
   
   // Boot IC if pin is defined (else: manual boot via push button has to be done before calling this method)
-  if (_bootPin >= 0)
-  {
-    wake();
-
-    // pinMode(bootPin, OUTPUT);
-    // digitalWrite(bootPin, HIGH);
-    // delay(5);   // wait 5 ms for device to receive boot signal (datasheet: max. 2 ms)
-    // pinMode(bootPin, INPUT);     // don't disturb temperature measurement
-    // delay(10);  // wait for device to boot up completely (datasheet: max. 10 ms)
-  }
+  wake();
  
   if (determineAddressAndCrc())
   {
@@ -430,6 +419,7 @@ void bq769x0::update()
   // updateCurrent();  // will only read new current value if alert was triggered
   updateVoltages();
   updateTemperatures();
+  updateBalanceSwitches();
   // 
   // updateBalancingSwitches();
 }
@@ -449,11 +439,14 @@ void bq769x0::shutdown()
  */
 void bq769x0::wake()
 {
-  pinMode(_bootPin, OUTPUT);
-  digitalWrite(_bootPin, HIGH);
-  delay(5);   // wait 5 ms for device to receive boot signal (datasheet: max. 2 ms)
-  pinMode(_bootPin, INPUT);     // don't disturb temperature measurement
-  delay(10);  // wait for device to boot up completely (datasheet: max. 10 ms)
+  if (_bootPin >= 0)
+  {
+    pinMode(_bootPin, OUTPUT);
+    digitalWrite(_bootPin, HIGH);
+    delay(5);   // wait 5 ms for device to receive boot signal (datasheet: max. 2 ms)
+    pinMode(_bootPin, INPUT);     // don't disturb temperature measurement
+    delay(10);  // wait for device to boot up completely (datasheet: max. 10 ms)
+  }
 }
 
 
@@ -675,24 +668,22 @@ bool bq769x0::setBalanceSwitch(uint8_t cellBal, uint8_t pos, bool switchState)
 
   if (cellBal == CELLBAL1)
   {
-    // _cellBal[0].databal = readRegister(cellBal);
-    _cellBal[0].databal = _dataCell[0];
+    _cellBal[0].databal = readRegister(cellBal);
+    // _cellBal[0].databal = _dataCell[0];
     data = _cellBal[0].databal;
   }
   else if (cellBal == CELLBAL2)
   {
-    // _cellBal[1].databal = readRegister(cellBal);
-    _cellBal[1].databal = _dataCell[1];
+    _cellBal[1].databal = readRegister(cellBal);
+    // _cellBal[1].databal = _dataCell[1];
     data = _cellBal[1].databal;
   }
   else if (cellBal == CELLBAL3)
   {
-    // _cellBal[2].databal = readRegister(cellBal);
-    _cellBal[2].databal = _dataCell[2];
+    _cellBal[2].databal = readRegister(cellBal);
+    // _cellBal[2].databal = _dataCell[2];
     data = _cellBal[2].databal;
   }
-  // Serial.print("data Bal = ");
-  // Serial.println(data, BIN);
   if (data < 0)
   {
     return 0;
@@ -749,7 +740,6 @@ bool bq769x0::setBalanceSwitches(uint8_t cellBal, uint8_t switchState)
   
   // int data = 0;
   int data = readRegister(cellBal);
-  delay(500);
   if (data < 0)
   {
     return 0;
@@ -803,68 +793,49 @@ void bq769x0::clearBalanceSwitches()
  */
 void bq769x0::updateBalanceSwitches()
 {
-  // int data = readRegister(_cellBal[0].cellBalAddress);
-  int data = _dataCell[0];
-  delay(500);
+  int data = readRegister(_cellBal[0].cellBalAddress);
+  // int data = _dataCell[0];
   if (data < 0)
   {
     return;
   }
   if (type == bq76920) 
   {  
-    #ifdef BQ769X0_TEST
-      Serial.print("CelBal address = ");
-      Serial.print("0x");
-      Serial.println(_cellBal[0].cellBalAddress, HEX);
-      Serial.print("Data bal = ");
-      Serial.println(_cellBal[0].databal, BIN);
-      _dataCell[0] = _cellBal[0].databal;
-      // writeRegister(_cellBal[0].cellBalAddress, _cellBal[0].databal);
-      // delay(500);
-      // _cellBal[0].databal = readRegister(_cellBal[0].cellBalAddress);
-      // delay(500);
-    #else
-      // writeRegister(_cellBal[0].cellBalAddress, _cellBal[0].databal);
-    #endif
+    // Serial.print("CelBal address = ");
+    // Serial.print("0x");
+    // Serial.println(_cellBal[0].cellBalAddress, HEX);
+    // Serial.print("Data bal = ");
+    // Serial.println(_cellBal[0].databal, BIN);
+    _dataCell[0] = _cellBal[0].databal;
+    writeRegister(_cellBal[0].cellBalAddress, _cellBal[0].databal);
+    _cellBal[0].databal = readRegister(_cellBal[0].cellBalAddress);
   }
   else if (type == bq76930) 
   {
     for (int i = 0; i < 2; i++)
     {
-      #ifdef BQ769X0_TEST
-        Serial.print("CelBal address = ");
-        Serial.print("0x");
-        Serial.println(_cellBal[i].cellBalAddress, HEX);
-        Serial.print("Data bal = ");
-        Serial.println(_cellBal[i].databal, BIN);
-        _dataCell[i] = _cellBal[i].databal;
-        // writeRegister(_cellBal[i].cellBalAddress, _cellBal[i].databal);
-        // delay(500);
-        // _cellBal[i].databal = readRegister(_cellBal[i].cellBalAddress);
-        // delay(500);
-      #else
-        // writeRegister(_cellBal[i].cellBalAddress, _cellBal[i].databal);
-      #endif
+      // Serial.print("CelBal address = ");
+      // Serial.print("0x");
+      // Serial.println(_cellBal[i].cellBalAddress, HEX);
+      // Serial.print("Data bal = ");
+      // Serial.println(_cellBal[i].databal, BIN);
+      _dataCell[i] = _cellBal[i].databal;
+      writeRegister(_cellBal[i].cellBalAddress, _cellBal[i].databal);
+      _cellBal[i].databal = readRegister(_cellBal[i].cellBalAddress);
     }
   }
   else 
   {
     for (int i = 0; i < 3; i++)
     {
-      #ifdef BQ769X0_TEST
-        Serial.print("CelBal address = ");
-        Serial.print("0x");
-        Serial.println(_cellBal[i].cellBalAddress, HEX);
-        Serial.print("Data bal = ");
-        Serial.println(_cellBal[i].databal, BIN);
-        _dataCell[i] = _cellBal[i].databal;
-        // writeRegister(_cellBal[i].cellBalAddress, _cellBal[i].databal);
-        // delay(500);
-        // _cellBal[i].databal = readRegister(_cellBal[i].cellBalAddress);
-        // delay(500);
-      #else
-        // writeRegister(_cellBal[i].cellBalAddress, _cellBal[i].databal);
-      #endif
+      // Serial.print("CelBal address = ");
+      // Serial.print("0x");
+      // Serial.println(_cellBal[i].cellBalAddress, HEX);
+      // Serial.print("Data bal = ");
+      // Serial.println(_cellBal[i].databal, BIN);
+      _dataCell[i] = _cellBal[i].databal;
+      writeRegister(_cellBal[i].cellBalAddress, _cellBal[i].databal);
+      _cellBal[i].databal = readRegister(_cellBal[i].cellBalAddress);
     }
   }
 }
@@ -1023,7 +994,7 @@ bool bq769x0::isPosInShortingPins(int pos, int shortingPinConfiguration)
 
 /**
  * if the pos is in shorting pins, this method will check before the first shorting pins and after the last shorting pins
- * it will also check if any of the pin in shorting pin. It will bitwise AND every of them, if one of them is not valid
+ * it will also check if any of the pin state in shorting pin. It will bitwise AND every of them, if one of them is not valid
  * it will return 0, otherwise return 1
  */
 bool bq769x0::posCheckInShortingPins(int pos, int data, int shortingPinConfiguration)
@@ -1040,7 +1011,7 @@ bool bq769x0::posCheckInShortingPins(int pos, int data, int shortingPinConfigura
 }
 
 /**
- * if the pos is in normal position, it will only check on adjacent pin, after pos and before pos
+ * if the pos is in normal position, it will only check on adjacent pin, after and before the selected position
  */
 bool bq769x0::posCheckNormalPins(int pos, int data)
 {
@@ -1136,7 +1107,7 @@ bool bq769x0::pinCheck(int pos, int data, int cellBalAddr)
   if (_cellConfiguration == CELL_10) //10 cell
   {
     Serial.println("CELL 10");
-    if(cellBalAddr != 0x01)
+    if(cellBalAddr != 0x01) //First Cell Stack
     {
       return tripleShortCheck(pos, data);
     }
@@ -1148,7 +1119,7 @@ bool bq769x0::pinCheck(int pos, int data, int cellBalAddr)
   if (_cellConfiguration == CELL_11) //11 cell
   {
     Serial.println("CELL 11");
-    if(cellBalAddr != 0x03)
+    if(cellBalAddr != 0x03) //Third Cell Stack
     {
       return doubleShortCheck(pos, data);
     }
@@ -1457,14 +1428,14 @@ void bq769x0::updateTemperatures()
   {
     for (int i = 0; i < 3; i ++)
     {
-      Wire.beginTransmission(I2CAddress);
-      Wire.write(TS1_HI_BYTE + (i * 2));
-      Wire.endTransmission();
+      _wire->beginTransmission(I2CAddress);
+      _wire->write(TS1_HI_BYTE + (i * 2));
+      _wire->endTransmission();
       
-      if (Wire.requestFrom(I2CAddress, 2) == 2)
+      if (_wire->requestFrom(I2CAddress, 2) == 2)
       {
         // calculate R_thermistor according to bq769x0 datasheet
-        adcVal = ((Wire.read() & B00111111) << 8) | Wire.read();
+        adcVal = ((_wire->read() & B00111111) << 8) | _wire->read();
         vtsx = adcVal * 0.382; // mV
         rts = 10000.0 * vtsx / (3300.0 - vtsx); // Ohm
             
@@ -1481,14 +1452,14 @@ void bq769x0::updateTemperatures()
   {
     for (int i = 0; i < 2; i ++)
     {
-      Wire.beginTransmission(I2CAddress);
-      Wire.write(TS1_HI_BYTE + (i * 2));
-      Wire.endTransmission();
+      _wire->beginTransmission(I2CAddress);
+      _wire->write(TS1_HI_BYTE + (i * 2));
+      _wire->endTransmission();
       
-      if (Wire.requestFrom(I2CAddress, 2) == 2)
+      if (_wire->requestFrom(I2CAddress, 2) == 2)
       {
         // calculate R_thermistor according to bq769x0 datasheet
-        adcVal = ((Wire.read() & B00111111) << 8) | Wire.read();
+        adcVal = ((_wire->read() & B00111111) << 8) | _wire->read();
         vtsx = adcVal * 0.382; // mV
         rts = 10000.0 * vtsx / (3300.0 - vtsx); // Ohm
             
@@ -1503,14 +1474,14 @@ void bq769x0::updateTemperatures()
   }
   if (type == bq76920)
   {
-    Wire.beginTransmission(I2CAddress);
-    Wire.write(TS1_HI_BYTE );
-    Wire.endTransmission();
+    _wire->beginTransmission(I2CAddress);
+    _wire->write(TS1_HI_BYTE );
+    _wire->endTransmission();
     
-    if (Wire.requestFrom(I2CAddress, 2) == 2)
+    if (_wire->requestFrom(I2CAddress, 2) == 2)
     {
       // calculate R_thermistor according to bq769x0 datasheet
-      adcVal = ((Wire.read() & B00111111) << 8) | Wire.read();
+      adcVal = ((_wire->read() & B00111111) << 8) | _wire->read();
       vtsx = adcVal * 0.382; // mV
       rts = 10000.0 * vtsx / (3300.0 - vtsx); // Ohm
           
@@ -1571,8 +1542,6 @@ void bq769x0::updateCurrent(bool ignoreCCReadyFlag)
  */
 void bq769x0::updateVoltages()
 {
-  Serial.println("==============Update Voltages===================");
-  Serial.println("Number of cell = " + String(numberOfCells));
   long adcVal = 0;
   char buf[4];
   int connectedCells = 0;
@@ -1599,17 +1568,15 @@ void bq769x0::updateVoltages()
     if (crcEnabled == true) {
       // refer to datasheet at 10.3.1.4 "Communications Subsystem"
       buf[0] = (char) VC1_HI_BYTE + (2*i); // start with the first cell
-      Serial.print("Register Address to Request = ");
-      Serial.println(buf[0], HEX);
-      Wire.beginTransmission(I2CAddress);
-      Wire.write(buf[0]);     // tell slave that this is the address it is interested in
+      _wire->beginTransmission(I2CAddress);
+      _wire->write(buf[0]);     // tell slave that this is the address it is interested in
       // Wire.write(buf[0] + (i*2));     // tell slave that this is the address it is interested in
-      Wire.endTransmission(); // end transmission so that read can begin
-      Wire.requestFrom(I2CAddress, 4);  // request 4 bytes: 1) VCx_HI - 2) VCx_HI CRC - 3) VCx_LO - 4) VCx_LO CRC
-      buf[0] = Wire.read();             // VCx_HI - note that only bottom 6 bits are good
-      buf[1] = Wire.read();             // VCx_HI CRC - done on address and data
-      buf[2] = Wire.read();             // VCx_LO - all 8 bits are used
-      buf[3] = Wire.read();             // VCx_LO CRC - done on just the data byte
+      _wire->endTransmission(); // end transmission so that read can begin
+      _wire->requestFrom(I2CAddress, 4);  // request 4 bytes: 1) VCx_HI - 2) VCx_HI CRC - 3) VCx_LO - 4) VCx_LO CRC
+      buf[0] = _wire->read();             // VCx_HI - note that only bottom 6 bits are good
+      buf[1] = _wire->read();             // VCx_HI CRC - done on address and data
+      buf[2] = _wire->read();             // VCx_LO - all 8 bits are used
+      buf[3] = _wire->read();             // VCx_LO CRC - done on just the data byte
       
       // check if CRC matches data bytes
       // CRC of first byte includes slave address (including R/W bit) and data
@@ -1631,15 +1598,14 @@ void bq769x0::updateVoltages()
     // if CRC is disabled only read 2 bytes and call it a day :)
     else { 
       Serial.println("No CRC");
-      Wire.requestFrom(I2CAddress, 2);
-      buf[0] = Wire.read(); // VCx_HI - note that only bottom 6 bits are good
-      buf[2] = Wire.read(); // VCx_LO - all 8 bits are used
+      _wire->requestFrom(I2CAddress, 2);
+      buf[0] = _wire->read(); // VCx_HI - note that only bottom 6 bits are good
+      buf[2] = _wire->read(); // VCx_LO - all 8 bits are used
     }
 
     // combine VCx_HI and VCx_LO bits and calculate cell voltage
     adcVal = (buf[0] & 0b00111111) << 8 | buf[2];           // read VCx_HI bits and drop the first two bits, shift left then append VCx_LO bits
     cellVoltages[i] = adcVal * adcGain / 1000 + adcOffset;  // calculate real voltage in mV
-    Serial.println("Cell Voltage " + String(i+1) + " = " + String(cellVoltages[i]));
   
     // filter out voltage readings from unconnected cell(s)
     if (cellVoltages[i] > 500) {  
@@ -1657,9 +1623,6 @@ void bq769x0::updateVoltages()
   
   long adcValPack = ((readRegister(BAT_HI_BYTE) << 8) | readRegister(BAT_LO_BYTE)) & 0b1111111111111111;
   batVoltage = 4 * adcGain * adcValPack / 1000 + (connectedCells * adcOffset); // in original LibreSolar, connectedCells is converted to byte, maybe to reduce bit size
-  Serial.print("Pack Voltage = ");
-  Serial.println(batVoltage);
-  Serial.println("==============end updateVoltages================");
 }
 
 //----------------------------------------------------------------------------
@@ -1681,9 +1644,9 @@ void bq769x0::writeRegister(byte address, int data)
   buf[1] = data;
 
   // note that writes to the bq769x0 IC are: 1) start - 2) address - 3) address - 4) data - 5) CRC8 - 6) stop bit
-  Wire.beginTransmission(I2CAddress); // writes start bit - the first step
-  Wire.write(buf[0]);                 // writes register address
-  Wire.write(buf[1]);                 // writes data - the fourth step
+  _wire->beginTransmission(I2CAddress); // writes start bit - the first step
+  _wire->write(buf[0]);                 // writes register address
+  _wire->write(buf[1]);                 // writes data - the fourth step
  
   if (crcEnabled == true) {
     // CRC is calculated over the slave address (including R/W bit), register address, and data.
@@ -1692,17 +1655,17 @@ void bq769x0::writeRegister(byte address, int data)
     crc = _crc8_ccitt_update(crc, buf[1]);
     buf[2] = crc;
 
-    Wire.write(buf[2]); // writes CRC
+    _wire->write(buf[2]); // writes CRC
     LOG_PRINT(" CRC:");
     LOG_PRINT(byte2char(buf[2]));
   }
 
-  Wire.endTransmission();
+  _wire->endTransmission();
   LOG_PRINTLN();
 }
 
 /**
- * Public method for writing register into device so it can be accessed outside the class 
+ * Public method for writing register into device so it can be accessed
  */
 void bq769x0::writeReg(byte address, int data)
 {
@@ -1718,20 +1681,19 @@ int bq769x0::readRegister(byte address)
   {
     _listener(_channel);
   }
-  Wire.beginTransmission(I2CAddress);
-  Wire.write(address);
-  Wire.endTransmission();
-  Wire.requestFrom(I2CAddress, 1);
-  return Wire.read();
+  _wire->beginTransmission(I2CAddress);
+  _wire->write(address);
+  _wire->endTransmission();
+  _wire->requestFrom(I2CAddress, 1);
+  return _wire->read();
 }
 
 
 /**
- * Public method for reading register from device so it can be accessed outside the class 
+ * Public method for reading register from device so it can be accessed
  */
 int bq769x0::readReg(byte address)
 {  
-  delay(500);
   return readRegister(address);
 }
 
