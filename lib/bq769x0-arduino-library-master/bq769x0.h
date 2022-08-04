@@ -115,12 +115,14 @@ class bq769x0 {
     void writeReg(byte address, int data);
     int readReg(byte address);
     void setCellConfiguration(int cellConfiguration);
+    int getCellConfiguration();
     bool testBalancing(uint8_t cellBal, uint8_t pos, bool switchState, int data);
     void enableBalancingProtection();
     void disableBalancingProtection();
     int getDataCell(int cellBal);
     void setListener(void (*listener)(uint8_t));
     void removeListener();    
+    int getTCAChannel();
 
 #if BQ769X0_DEBUG
 	void printRegisters(void);		

@@ -4,16 +4,36 @@
 #include <registers.h>
 #include <FastLED.h>
 #include <WiFi.h>
+#include <WiFiClient.h>
+#include <BlynkSimpleEsp32.h>
 
 #define BMS_ALERT_PIN 34     // attached to interrupt INT0
 #define BMS_BOOT_PIN 18      // connected to TS1 input
 #define BMS_I2C_ADDRESS 0x08
 
+#define BLYNK_PRINT Serial
+
+/* Fill-in your Template ID (only if using Blynk.Cloud) */
+// #define BLYNK_TEMPLATE_ID   "YourTemplateID"
+
+
+// You should get Auth Token in the Blynk App.
+// Go to the Project Settings (nut icon).
+char auth[] = "sGZwg34WR9aDxtGkJDJz4adtpwAgfzpj";
+
+// Your WiFi credentials.
+// Set password to "" for open networks.
+char ssid[] = "BOLT!-7157";
+char pass[] = "sundaya2021";
+
 bq769x0 BMS(bq76940, BMS_I2C_ADDRESS, 7);
 bq769x0 BMS2(bq76940, BMS_I2C_ADDRESS, 6);
 bool isFinish = false;
+bool isFirstDataSent = false;
 String command;
 TwoWire wire = TwoWire(0);
+
+BlynkTimer timer;
 
 // How many leds in your strip?
 #define NUM_LEDS 8
@@ -225,13 +245,13 @@ void checkCommand(String command)
     Serial.println(BMS.readReg(CELLBAL2));
     Serial.print("CELLBAL3 = ");
     Serial.println(BMS.readReg(CELLBAL3));
-    Serial.println("=========BMS 2============");
-    Serial.print("CELLBAL1 = ");
-    Serial.println(BMS2.readReg(CELLBAL1));
-    Serial.print("CELLBAL2 = ");
-    Serial.println(BMS2.readReg(CELLBAL2));
-    Serial.print("CELLBAL3 = ");
-    Serial.println(BMS2.readReg(CELLBAL3));  
+    // Serial.println("=========BMS 2============");
+    // Serial.print("CELLBAL1 = ");
+    // Serial.println(BMS2.readReg(CELLBAL1));
+    // Serial.print("CELLBAL2 = ");
+    // Serial.println(BMS2.readReg(CELLBAL2));
+    // Serial.print("CELLBAL3 = ");
+    // Serial.println(BMS2.readReg(CELLBAL3));  
   }
   if (command == "shutdown")
   {
@@ -254,26 +274,50 @@ void checkCommand(String command)
   }
 }
 
-
+void myTimerEvent()
+{
+  // You can send any value at any time.
+  // Please don't send more that 10 values per second.
+  if(!isFirstDataSent)
+  {
+    for (int i = 1; i < 11; i++)
+    {
+      
+      Blynk.virtualWrite(i, BMS.getCellVoltage(i));
+      isFirstDataSent = true;
+    }
+  }
+  else
+  {
+    for (int i = 11; i < 16; i++)
+    {
+      Blynk.virtualWrite(i, BMS.getCellVoltage(i));
+      isFirstDataSent = false;
+    }
+    Blynk.virtualWrite(16, BMS.getBatteryVoltage());
+  }
+}
 
 void setup() {
   // put your setup code here, to run once:
   FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);
   Serial.begin(115200);
-  wire.setPins(21,22);
+  Blynk.begin(auth, ssid, pass, "iot.serangkota.go.id", 8080);
+  timer.setInterval(1000L, myTimerEvent);
+  wire.setPins(26,27);
   wire.begin();
   BMS.setI2C(&wire);
-  BMS2.setI2C(&wire);
+  // BMS2.setI2C(&wire);
   if (!isFinish)
   {
     Scanner();
   }
   int err = BMS.begin(BMS_ALERT_PIN, BMS_BOOT_PIN, &TCA9548A);
-  int err2 = BMS2.begin(BMS_ALERT_PIN, BMS_BOOT_PIN, &TCA9548A);
+  // int err2 = BMS2.begin(BMS_ALERT_PIN, BMS_BOOT_PIN, &TCA9548A);
   
   
   BMS.setCellConfiguration(BMS.CELL_10);
-  BMS2.setCellConfiguration(BMS2.CELL_10);
+  // BMS2.setCellConfiguration(BMS2.CELL_10);
 
   // BMS.setTemperatureLimits(-20, 45, 0, 45);
   // BMS.setShuntResistorValue(5);
@@ -288,40 +332,53 @@ void setup() {
   // BMS.enableAutoBalancing();
   // BMS.enableDischarging();
   int data = BMS.readReg(SYS_STAT);
-  int data2 = BMS2.readReg(SYS_STAT);
+  // int data2 = BMS2.readReg(SYS_STAT);
   Serial.print("SYS_STAT 1 = ");
   Serial.println(data, BIN);
-  Serial.print("SYS_STAT 2 = ");
-  Serial.println(data2, BIN);
+  // Serial.print("SYS_STAT 2 = ");
+  // Serial.println(data2, BIN);
   Serial.println("Clearing SYS_STAT 1");
   BMS.writeReg(SYS_STAT, data);
-  Serial.println("Clearing SYS_STAT 2");
-  BMS2.writeReg(SYS_STAT, data2);
+  // Serial.println("Clearing SYS_STAT 2");
+  // BMS2.writeReg(SYS_STAT, data2);
   data = BMS.readReg(SYS_STAT);
   Serial.print("SYS_STAT 1 = ");
   Serial.println(data, BIN);
-  data = BMS2.readReg(SYS_STAT);
-  Serial.print("SYS_STAT 2 = ");
-  Serial.println(data2, BIN);
-  
+  // data = BMS2.readReg(SYS_STAT);
+  // Serial.print("SYS_STAT 2 = ");
+  // Serial.println(data2, BIN);
+
 }
 
 void test()
 {
-  Serial.println("test");
+  Serial.println("test"); 
 }
+
 
 void loop() {
 
   // put your main code here, to run repeatedly:
-  // Scanner();
-  // cekBms();
+  Blynk.run();
+  timer.run();
+  BMS.update();
+  Serial.println("======Voltage Measurement========");
+  Serial.println("Cell Configuration : " + String(BMS.getCellConfiguration()));
+  Serial.println("TCA Channel : " + String(BMS.getTCAChannel()));
+  for(int i = 1; i < 16; i++)
+  {
+    Serial.print("Cell Voltage " + String(i) + " : ");
+    Serial.println(BMS.getCellVoltage(i));
+  }
+  Serial.print("Pack Voltage : ");
+  Serial.println(BMS.getBatteryVoltage());
+  Serial.println("=================================");
   if (serialRead())
   {
     Serial.println(command);
     checkCommand(command);
     command = "";
   }
-  
+  delay(250);
 }
 

@@ -129,6 +129,11 @@ bq769x0::bq769x0(byte bqType, int bqI2CAddress, uint8_t channel)
   disableBalancingProtection();
 }
 
+int bq769x0::getTCAChannel()
+{
+  return _channel;
+}
+
 void bq769x0::setI2C(TwoWire *wire)
 {
   _wire = wire;
@@ -264,6 +269,11 @@ void bq769x0::setCellConfiguration(int cellConfiguration)
   {
     _cellConfiguration = cellConfiguration;
   }
+}
+
+int bq769x0::getCellConfiguration()
+{
+  return _cellConfiguration;
 }
 
 /**
@@ -419,7 +429,7 @@ void bq769x0::update()
   // updateCurrent();  // will only read new current value if alert was triggered
   updateVoltages();
   updateTemperatures();
-  updateBalanceSwitches();
+  // updateBalanceSwitches();
   // 
   // updateBalancingSwitches();
 }
@@ -1550,7 +1560,8 @@ void bq769x0::updateVoltages()
 
   uint8_t crc;
   crc = 0;  
-  
+  // Serial.println("========Voltage Measurement==========");
+  // Serial.println("TCA Channel : " + String(_channel));
 
   /****************************************************\
     Note that each cell voltage is 14 bits stored across two 8 bit register locations in the BQ769x0 chip.
@@ -1606,6 +1617,8 @@ void bq769x0::updateVoltages()
     // combine VCx_HI and VCx_LO bits and calculate cell voltage
     adcVal = (buf[0] & 0b00111111) << 8 | buf[2];           // read VCx_HI bits and drop the first two bits, shift left then append VCx_LO bits
     cellVoltages[i] = adcVal * adcGain / 1000 + adcOffset;  // calculate real voltage in mV
+    // Serial.print("Cell Voltage " + String(i+1) + " : ");
+    // Serial.println(cellVoltages[i]);
   
     // filter out voltage readings from unconnected cell(s)
     if (cellVoltages[i] > 500) {  
@@ -1623,6 +1636,9 @@ void bq769x0::updateVoltages()
   
   long adcValPack = ((readRegister(BAT_HI_BYTE) << 8) | readRegister(BAT_LO_BYTE)) & 0b1111111111111111;
   batVoltage = 4 * adcGain * adcValPack / 1000 + (connectedCells * adcOffset); // in original LibreSolar, connectedCells is converted to byte, maybe to reduce bit size
+  // Serial.print("Pack Voltage : ");
+  // Serial.println(batVoltage);
+  // Serial.println("===============================");
 }
 
 //----------------------------------------------------------------------------
