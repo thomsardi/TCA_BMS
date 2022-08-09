@@ -30,6 +30,9 @@ bq769x0 BMS(bq76940, BMS_I2C_ADDRESS, 7);
 bq769x0 BMS2(bq76940, BMS_I2C_ADDRESS, 6);
 bool isFinish = false;
 bool isFirstDataSent = false;
+bool isFirstRun = true;
+int state = 0;
+unsigned long currTime;
 String command;
 TwoWire wire = TwoWire(0);
 
@@ -121,11 +124,25 @@ void Scanner ()
 void cekBms()
 {
   BMS.update();
+  Serial.println("======Voltage Measurement========");
+  Serial.println("Cell Configuration : " + String(BMS.getCellConfiguration()));
+  Serial.println("TCA Channel : " + String(BMS.getTCAChannel()));
+  for(int i = 1; i < 16; i++)
+  {
+    Serial.print("Cell Voltage " + String(i) + " : ");
+    Serial.println(BMS.getCellVoltage(i));
+  }
+
+  Serial.print("Pack Voltage : ");
+  Serial.println(BMS.getBatteryVoltage());
+  Serial.println("=================================");
+
   for (int i = 0; i < 3; i++)
   {
     Serial.print("Temperature Cell " + String(i+1) + " = ");
     Serial.println(String(BMS.getTemperatureDegC(i+1)));
   }
+
   int data = BMS.readReg(SYS_STAT);
   BMS.writeReg(SYS_STAT, data);
   Serial.print("SYS_STAT = ");
@@ -136,6 +153,15 @@ void cekBms()
 void cekBms2()
 {
   BMS2.update();
+  for(int i = 1; i < 16; i++)
+  {
+    Serial.print("Cell Voltage " + String(i) + " : ");
+    Serial.println(BMS2.getCellVoltage(i));
+  }
+
+  Serial.print("Pack Voltage : ");
+  Serial.println(BMS2.getBatteryVoltage());
+  Serial.println("=================================");
   for (int i = 0; i < 3; i++)
   {
     Serial.print("Temperature Cell " + String(i+1) + " = ");
@@ -198,6 +224,16 @@ void checkCommand(String command)
     // Test On WS2812 Led
     dataToLed(leds, BMS.getDataCell(cellBalAddr), 8);
   }
+  if (command.indexOf("bal2") >= 0)
+  {
+    parsingString(command, ',');
+    BMS2.enableBalancingProtection();
+    BMS2.setBalanceSwitch(cellBalAddr, cellBalBitPos, cellBalState);
+    BMS2.updateBalanceSwitches();
+    Serial.println(BMS2.getDataCell(cellBalAddr));
+    // Test On WS2812 Led
+    dataToLed(leds, BMS2.getDataCell(cellBalAddr), 8);
+  }
 
   if (command.indexOf("testbal") >= 0)
   {
@@ -217,13 +253,16 @@ void checkCommand(String command)
     Serial.println("Change Cell Config");
     parsingString(command, ',');
     BMS.setCellConfiguration(cellBalAddr);
+    BMS2.setCellConfiguration(cellBalAddr);
     
   }
 
   if (command == "end")
   {
     BMS.clearBalanceSwitches();
+    BMS2.clearBalanceSwitches();
     BMS.updateBalanceSwitches();
+    BMS2.updateBalanceSwitches();
     for (int i = 1; i < 4; i++)
     {
       dataToLed(leds, BMS.getDataCell(i), 8);
@@ -245,13 +284,13 @@ void checkCommand(String command)
     Serial.println(BMS.readReg(CELLBAL2));
     Serial.print("CELLBAL3 = ");
     Serial.println(BMS.readReg(CELLBAL3));
-    // Serial.println("=========BMS 2============");
-    // Serial.print("CELLBAL1 = ");
-    // Serial.println(BMS2.readReg(CELLBAL1));
-    // Serial.print("CELLBAL2 = ");
-    // Serial.println(BMS2.readReg(CELLBAL2));
-    // Serial.print("CELLBAL3 = ");
-    // Serial.println(BMS2.readReg(CELLBAL3));  
+    Serial.println("=========BMS 2============");
+    Serial.print("CELLBAL1 = ");
+    Serial.println(BMS2.readReg(CELLBAL1));
+    Serial.print("CELLBAL2 = ");
+    Serial.println(BMS2.readReg(CELLBAL2));
+    Serial.print("CELLBAL3 = ");
+    Serial.println(BMS2.readReg(CELLBAL3));  
   }
   if (command == "shutdown")
   {
@@ -278,24 +317,47 @@ void myTimerEvent()
 {
   // You can send any value at any time.
   // Please don't send more that 10 values per second.
-  if(!isFirstDataSent)
+  // Serial.println("My Timer Event");
+  switch(state)
   {
-    for (int i = 1; i < 11; i++)
-    {
-      
-      Blynk.virtualWrite(i, BMS.getCellVoltage(i));
-      isFirstDataSent = true;
-    }
+    case 0:
+      for (int i = 1; i < 11; i++)
+      {
+        
+        Blynk.virtualWrite(i, BMS.getCellVoltage(i));
+      }
+      state++;
+      // Serial.println("Case 0");
+      break;
+    case 1:
+      for (int i = 11; i < 16; i++)
+      {
+        Blynk.virtualWrite(i, BMS.getCellVoltage(i));
+      }
+      Blynk.virtualWrite(16, BMS.getBatteryVoltage());
+      state++;
+      // Serial.println("Case 1");
+      break;
+    case 2:
+      for (int i = 20; i < 30; i++)
+      {
+        Blynk.virtualWrite(i, BMS2.getCellVoltage(i-19));
+      }
+      state++;
+      // Serial.println("Case 2");
+      break;
+    case 3:
+      for (int i = 30; i < 35; i++)
+      {
+        Blynk.virtualWrite(i, BMS2.getCellVoltage(i-19));
+      }
+      Blynk.virtualWrite(35, BMS2.getBatteryVoltage());
+      state = 0;
+      // Serial.println("Case 3");
+      break;
   }
-  else
-  {
-    for (int i = 11; i < 16; i++)
-    {
-      Blynk.virtualWrite(i, BMS.getCellVoltage(i));
-      isFirstDataSent = false;
-    }
-    Blynk.virtualWrite(16, BMS.getBatteryVoltage());
-  }
+    
+
 }
 
 void setup() {
@@ -307,17 +369,17 @@ void setup() {
   wire.setPins(26,27);
   wire.begin();
   BMS.setI2C(&wire);
-  // BMS2.setI2C(&wire);
+  BMS2.setI2C(&wire);
   if (!isFinish)
   {
     Scanner();
   }
   int err = BMS.begin(BMS_ALERT_PIN, BMS_BOOT_PIN, &TCA9548A);
-  // int err2 = BMS2.begin(BMS_ALERT_PIN, BMS_BOOT_PIN, &TCA9548A);
+  int err2 = BMS2.begin(BMS_ALERT_PIN, BMS_BOOT_PIN, &TCA9548A);
   
   
   BMS.setCellConfiguration(BMS.CELL_10);
-  // BMS2.setCellConfiguration(BMS2.CELL_10);
+  BMS2.setCellConfiguration(BMS2.CELL_10);
 
   // BMS.setTemperatureLimits(-20, 45, 0, 45);
   // BMS.setShuntResistorValue(5);
@@ -332,21 +394,21 @@ void setup() {
   // BMS.enableAutoBalancing();
   // BMS.enableDischarging();
   int data = BMS.readReg(SYS_STAT);
-  // int data2 = BMS2.readReg(SYS_STAT);
+  int data2 = BMS2.readReg(SYS_STAT);
   Serial.print("SYS_STAT 1 = ");
   Serial.println(data, BIN);
-  // Serial.print("SYS_STAT 2 = ");
-  // Serial.println(data2, BIN);
+  Serial.print("SYS_STAT 2 = ");
+  Serial.println(data2, BIN);
   Serial.println("Clearing SYS_STAT 1");
   BMS.writeReg(SYS_STAT, data);
-  // Serial.println("Clearing SYS_STAT 2");
-  // BMS2.writeReg(SYS_STAT, data2);
+  Serial.println("Clearing SYS_STAT 2");
+  BMS2.writeReg(SYS_STAT, data2);
   data = BMS.readReg(SYS_STAT);
   Serial.print("SYS_STAT 1 = ");
   Serial.println(data, BIN);
-  // data = BMS2.readReg(SYS_STAT);
-  // Serial.print("SYS_STAT 2 = ");
-  // Serial.println(data2, BIN);
+  data = BMS2.readReg(SYS_STAT);
+  Serial.print("SYS_STAT 2 = ");
+  Serial.println(data2, BIN);
 
 }
 
@@ -361,24 +423,52 @@ void loop() {
   // put your main code here, to run repeatedly:
   Blynk.run();
   timer.run();
-  BMS.update();
-  Serial.println("======Voltage Measurement========");
-  Serial.println("Cell Configuration : " + String(BMS.getCellConfiguration()));
-  Serial.println("TCA Channel : " + String(BMS.getTCAChannel()));
-  for(int i = 1; i < 16; i++)
+
+  if (isFirstRun)
   {
-    Serial.print("Cell Voltage " + String(i) + " : ");
-    Serial.println(BMS.getCellVoltage(i));
+    BMS.update();
+    BMS2.update();
+    currTime = millis();
+    isFirstRun = false;
   }
-  Serial.print("Pack Voltage : ");
-  Serial.println(BMS.getBatteryVoltage());
-  Serial.println("=================================");
+
+  if ((millis() - currTime) > 250 )
+  {
+    BMS.update();
+    BMS2.update();
+    currTime = millis();
+  }
+  
+  // Serial.println("======Voltage Measurement========");
+  // Serial.println("Cell Configuration : " + String(BMS.getCellConfiguration()));
+  // Serial.println("TCA Channel : " + String(BMS.getTCAChannel()));
+  // for(int i = 1; i < 16; i++)
+  // {
+  //   Serial.print("Cell Voltage " + String(i) + " : ");
+  //   Serial.println(BMS.getCellVoltage(i));
+  // }
+  // Serial.print("Pack Voltage : ");
+  // Serial.println(BMS.getBatteryVoltage());
+  // Serial.println("=================================");
+
+  // Serial.println("======Voltage Measurement========");
+  // Serial.println("Cell Configuration : " + String(BMS2.getCellConfiguration()));
+  // Serial.println("TCA Channel : " + String(BMS2.getTCAChannel()));
+  // for(int i = 1; i < 16; i++)
+  // {
+  //   Serial.print("Cell Voltage " + String(i) + " : ");
+  //   Serial.println(BMS2.getCellVoltage(i));
+  // }
+  // Serial.print("Pack Voltage : ");
+  // Serial.println(BMS2.getBatteryVoltage());
+  // Serial.println("=================================");
+
   if (serialRead())
   {
     Serial.println(command);
     checkCommand(command);
     command = "";
   }
-  delay(250);
+  // delay(250);
 }
 
