@@ -8,14 +8,17 @@
 #define BMS_I2C_ADDRESS 0x08
 
 bq769x0 BMS(bq76940, BMS_I2C_ADDRESS, 7);
-bool isFinish = false;
+bool isFirstRun = true;
+unsigned long currTime;
 TwoWire wire = TwoWire(0);
+
+int sda = 26;
+int scl = 27;
 
 void TCA9548A(uint8_t bus){
   wire.beginTransmission(0x70);  // TCA9548A address
   wire.write(1 << bus);          // send byte to select bus
   wire.endTransmission();
-  // Serial.print(bus);
 }
 
 void Scanner ()
@@ -44,7 +47,7 @@ void Scanner ()
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
-  wire.setPins(21,22);
+  wire.setPins(sda,scl);
   wire.begin();
   BMS.setI2C(&wire);
   Scanner();
@@ -81,7 +84,24 @@ void setup() {
 
 void loop() {
   // put your main code here, to run repeatedly:
-  BMS.update();
+  Serial.println("Single BMS Example");
+  if (isFirstRun)
+  {
+    BMS.update();
+    currTime = millis();
+    isFirstRun = false;
+  }
+
+  // According to library, BMS.update() should be called once every 250ms
+  if ((millis() - currTime) > 250 )
+  {
+    BMS.update();
+    currTime = millis();
+  }
+  
+  Serial.println("=======Voltage Measurement=========");
+  Serial.println("Channel : " + String(BMS.getTCAChannel()));
+  Serial.println("Cell Configuration : " + String(BMS.getCellConfiguration()) + " Cell(s)");
   for (int i = 1; i < 16; i ++)
   {
     Serial.print("Cell Voltage " + String(i) + " : ");
@@ -98,6 +118,6 @@ void loop() {
   }
   Serial.print("Pack Voltage : ");
   Serial.println(BMS.getBatteryVoltage());
-  delay(250);
+  Serial.println("========End of Voltage Measurement========");
 }
 

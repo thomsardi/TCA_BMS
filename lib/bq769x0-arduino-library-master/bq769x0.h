@@ -45,6 +45,9 @@
     #define LOG_PRINTLN(x)
 #endif
 
+// TO DO : Simplified function pointer
+// typedef void(*callback) (uint8_t);
+
 class bq769x0 {
 
   public:
@@ -123,6 +126,7 @@ class bq769x0 {
     void setListener(void (*listener)(uint8_t));
     void removeListener();    
     int getTCAChannel();
+    bool isDeviceSleep();
 
 #if BQ769X0_DEBUG
 	void printRegisters(void);		
@@ -187,10 +191,12 @@ class bq769x0 {
     int _cellConfiguration;
     int _dataCell[3];
     bool _isBalancingProtectionEnabled = false;
+    bool _isSleep = false;
     void (*_listener) (uint8_t) = 0;
     byte _bootPin;
     byte _alertPin;
     TwoWire* _wire;
+    // callback _callback; //use to simplified function pointer naming
 
     // Methods
     bool determineAddressAndCrc(void);

@@ -152,9 +152,9 @@ int bq769x0::begin(byte alertPin, byte bootPin)
     cellVoltages[i] = 0;
   }
   
-  if (_wire <= 0)
+  if (_wire <= 0 || _wire == NULL)
   {
-    Serial.println("BMS I2C pin not defined");
+    // Serial.println("BMS I2C pin not defined");
     return 1;
   }
 
@@ -422,6 +422,14 @@ int bq769x0::checkStatus()
 void bq769x0::update()
 {
   LOG_PRINTLN("update");
+  if(_isSleep)
+  {
+    return;
+  }
+  if(_wire <= 0 || _wire == NULL)
+  {
+    return;
+  }
   if (_listener > 0)
   {
     _listener(_channel);
@@ -429,19 +437,29 @@ void bq769x0::update()
   // updateCurrent();  // will only read new current value if alert was triggered
   updateVoltages();
   updateTemperatures();
-  // updateBalanceSwitches();
+  updateBalanceSwitches();
   // 
   // updateBalancingSwitches();
 }
 
 //----------------------------------------------------------------------------
 // puts BMS IC into SHIP mode (i.e. switched off)
-
+/**
+ * Puts BMS IC into SHIP mode (i.e. switched off)
+ */
 void bq769x0::shutdown()
 {
   writeRegister(SYS_CTRL1, 0x0);
   writeRegister(SYS_CTRL1, 0x1);
   writeRegister(SYS_CTRL1, 0x2);
+  delay(250); //Give time for IC to perform sleep sequence, minimum 250ms, the longer the time, the better
+  int data = readRegister(CELLBAL1);
+  Serial.println("BMS Channel " + String(_channel) + " Shutdown");
+  Serial.println("Data Register Check : " + String(data));
+  if (data < 0)
+  {
+    _isSleep = true;
+  }
 }
 
 /**
@@ -457,8 +475,20 @@ void bq769x0::wake()
     pinMode(_bootPin, INPUT);     // don't disturb temperature measurement
     delay(10);  // wait for device to boot up completely (datasheet: max. 10 ms)
   }
+  int data = readRegister(CELLBAL1);
+  if(data >= 0)
+  {
+    // initial settings for bq769x0
+    writeRegister(SYS_CTRL1, B00011000);  // switch external thermistor (TEMP_SEL) and ADC on (ADC_EN)
+    writeRegister(SYS_CTRL2, B01000000);  // switch CC_EN on
+    _isSleep = false;
+  }
 }
 
+bool bq769x0::isDeviceSleep()
+{
+  return _isSleep;
+}
 
 //----------------------------------------------------------------------------
 
@@ -669,28 +699,27 @@ bool bq769x0::testBalancing(uint8_t cellBal, uint8_t pos, bool switchState, int 
  */
 bool bq769x0::setBalanceSwitch(uint8_t cellBal, uint8_t pos, bool switchState)
 {
-  Serial.println("Set Single Balancing");
-  int data;
-  if (pos > 4)
+  // Serial.println("Set Single Balancing");
+  int data = readRegister(cellBal);
+  if (pos > 4 || data < 0)
   {
     return 0;
   }
-
   if (cellBal == CELLBAL1)
   {
-    _cellBal[0].databal = readRegister(cellBal);
+    // _cellBal[0].databal = readRegister(cellBal);
     // _cellBal[0].databal = _dataCell[0];
     data = _cellBal[0].databal;
   }
   else if (cellBal == CELLBAL2)
   {
-    _cellBal[1].databal = readRegister(cellBal);
+    // _cellBal[1].databal = readRegister(cellBal);
     // _cellBal[1].databal = _dataCell[1];
     data = _cellBal[1].databal;
   }
   else if (cellBal == CELLBAL3)
   {
-    _cellBal[2].databal = readRegister(cellBal);
+    // _cellBal[2].databal = readRegister(cellBal);
     // _cellBal[2].databal = _dataCell[2];
     data = _cellBal[2].databal;
   }
@@ -742,8 +771,10 @@ bool bq769x0::setBalanceSwitch(uint8_t cellBal, uint8_t pos, bool switchState)
 }
 
 /**
- * Method to set CELLBAL register by byte (8 bit), this method will not check for adjacent cell
- * be careful when using this method
+ * Method to set CELLBAL register by byte (8 bit), Note that only 6 bit is used
+ * this method will fill the register from LSB to MSB
+ * depends on how the cell configuration is set and if the balancing protection is activated,
+ * some register may not be set 1 to prevent balancing adjacent cell
  */
 bool bq769x0::setBalanceSwitches(uint8_t cellBal, uint8_t switchState)
 {
@@ -754,20 +785,15 @@ bool bq769x0::setBalanceSwitches(uint8_t cellBal, uint8_t switchState)
   {
     return 0;
   }
-  if (cellBal == CELLBAL1)
+
+  for(int i = 0; i < 6; i ++)
   {
-    _cellBal[0].cellBalAddress = CELLBAL1;
-    _cellBal[0].databal = switchState;
-  }
-  else if (cellBal == CELLBAL2)
-  {
-    _cellBal[1].cellBalAddress = CELLBAL2;
-    _cellBal[1].databal = switchState;
-  }
-  else if (cellBal == CELLBAL3)
-  {
-    _cellBal[2].cellBalAddress = CELLBAL3;
-    _cellBal[2].databal = switchState;
+    int state = getBit(i, switchState);
+    if (state < 0)
+    {
+      break;
+    }
+    setBalanceSwitch(cellBal, i, state);  
   }
   return 1;
 }
@@ -852,7 +878,7 @@ void bq769x0::updateBalanceSwitches()
 
 /**
  * Method to get bit value from int data type, it takes argument of bit position and data
- * will return -1 if the pos is more than 7 or below 0
+ * return -1 if the pos is more than 7 or below 0
  */
 int bq769x0::getBit(int pos, int data)
 {
@@ -1110,13 +1136,13 @@ bool bq769x0::pinCheck(int pos, int data, int cellBalAddr)
 {
   if (_cellConfiguration == CELL_9) //9 cell
   {
-    Serial.println("CELL 9");
+    // Serial.println("CELL 9");
     return tripleShortCheck(pos, data);
   }
 
   if (_cellConfiguration == CELL_10) //10 cell
   {
-    Serial.println("CELL 10");
+    // Serial.println("CELL 10");
     if(cellBalAddr != 0x01) //First Cell Stack
     {
       return tripleShortCheck(pos, data);
@@ -1128,7 +1154,7 @@ bool bq769x0::pinCheck(int pos, int data, int cellBalAddr)
   }
   if (_cellConfiguration == CELL_11) //11 cell
   {
-    Serial.println("CELL 11");
+    // Serial.println("CELL 11");
     if(cellBalAddr != 0x03) //Third Cell Stack
     {
       return doubleShortCheck(pos, data);
@@ -1140,12 +1166,12 @@ bool bq769x0::pinCheck(int pos, int data, int cellBalAddr)
   }
   if (_cellConfiguration == CELL_12) //12 cell
   {
-    Serial.println("CELL 12");
+    // Serial.println("CELL 12");
     return doubleShortCheck(pos, data);
   }
   if (_cellConfiguration == CELL_13) //13 cell
   {
-    Serial.println("CELL 13");
+    // Serial.println("CELL 13");
     if (cellBalAddr != 0x01)
     {
       return doubleShortCheck(pos, data);
@@ -1157,7 +1183,7 @@ bool bq769x0::pinCheck(int pos, int data, int cellBalAddr)
   }
   if (_cellConfiguration == CELL_14) //14 cell
   {
-    Serial.println("CELL 14");
+    // Serial.println("CELL 14");
     if (cellBalAddr != 0x03)
     {
       return noShortCheck(pos, data);
@@ -1169,7 +1195,7 @@ bool bq769x0::pinCheck(int pos, int data, int cellBalAddr)
   }
   if (_cellConfiguration == CELL_15) //15 cell
   {
-    Serial.println("CELL 15");
+    // Serial.println("CELL 15");
     return noShortCheck(pos, data);
   }
 }
@@ -1608,7 +1634,7 @@ void bq769x0::updateVoltages()
 
     // if CRC is disabled only read 2 bytes and call it a day :)
     else { 
-      Serial.println("No CRC");
+      // Serial.println("No CRC");
       _wire->requestFrom(I2CAddress, 2);
       buf[0] = _wire->read(); // VCx_HI - note that only bottom 6 bits are good
       buf[2] = _wire->read(); // VCx_LO - all 8 bits are used
@@ -1646,6 +1672,11 @@ void bq769x0::updateVoltages()
 
 void bq769x0::writeRegister(byte address, int data)
 {
+  if(_wire <= 0 || _wire == NULL)
+  {
+    Serial.println("I2C not defined");
+    return;
+  }
   if (_listener > 0)
   {
     _listener(_channel);
@@ -1681,7 +1712,7 @@ void bq769x0::writeRegister(byte address, int data)
 }
 
 /**
- * Public method for writing register into device so it can be accessed
+ * Public method for writing register into device
  */
 void bq769x0::writeReg(byte address, int data)
 {
@@ -1693,6 +1724,10 @@ void bq769x0::writeReg(byte address, int data)
 
 int bq769x0::readRegister(byte address)
 {  
+  if(_wire <= 0 || _wire == NULL)
+  {
+    return -1;
+  }
   if (_listener > 0)
   {
     _listener(_channel);
@@ -1706,7 +1741,7 @@ int bq769x0::readRegister(byte address)
 
 
 /**
- * Public method for reading register from device so it can be accessed
+ * Public method for reading register from device
  */
 int bq769x0::readReg(byte address)
 {  
