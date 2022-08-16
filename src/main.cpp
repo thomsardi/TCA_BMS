@@ -26,7 +26,7 @@ char auth[] = "sGZwg34WR9aDxtGkJDJz4adtpwAgfzpj";
 char ssid[] = "BOLT!-7157";
 char pass[] = "sundaya2021";
 
-bq769x0 BMS[2] = {bq769x0(bq76940, BMS_I2C_ADDRESS, 7), bq769x0(bq76940, BMS_I2C_ADDRESS, 6)};
+bq769x0 BMS[3] = {bq769x0(bq76940, BMS_I2C_ADDRESS, 7), bq769x0(bq76940, BMS_I2C_ADDRESS, 6), bq769x0(bq76940, BMS_I2C_ADDRESS, 5)};
 size_t arrSize = sizeof(BMS)/sizeof(BMS[0]);
 
 bool isFinish = false;
@@ -275,7 +275,16 @@ void checkCommand(String command)
     // Test On WS2812 Led
     dataToLed(leds, BMS[1].getDataCell(cellBalAddr), 8);
   }
-
+  if (command.indexOf("bal3") >= 0)
+  {
+    parsingString(command, ',');
+    BMS[2].enableBalancingProtection();
+    BMS[2].setBalanceSwitch(cellBalAddr, cellBalBitPos, cellBalState);
+    // BMS[1].updateBalanceSwitches();
+    Serial.println(BMS[2].getDataCell(cellBalAddr));
+    // Test On WS2812 Led
+    dataToLed(leds, BMS[2].getDataCell(cellBalAddr), 8);
+  }
   if (command.indexOf("testbal") >= 0)
   {
     parsingString(command, ',');
@@ -431,8 +440,8 @@ void setup() {
   Serial.println("BQ with TCA and Blynk Example");
   FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);
   Serial.begin(115200);
-  Blynk.begin(auth, ssid, pass, "iot.serangkota.go.id", 8080);
-  timer.setInterval(1000L, myTimerEvent);
+  // Blynk.begin(auth, ssid, pass, "iot.serangkota.go.id", 8080);
+  // timer.setInterval(1000L, myTimerEvent);
   wire.setPins(sda,scl);
   wire.begin();
   for (int i = 0; i < arrSize; i ++)
@@ -461,6 +470,7 @@ void setup() {
 
   BMS[0].setCellConfiguration(BMS[0].CELL_10);
   BMS[1].setCellConfiguration(BMS[1].CELL_10);
+  BMS[2].setCellConfiguration(BMS[2].CELL_12);
 
   // BMS.setTemperatureLimits(-20, 45, 0, 45);
   // BMS.setShuntResistorValue(5);
@@ -499,8 +509,8 @@ void test()
 void loop() {
 
   // put your main code here, to run repeatedly:
-  Blynk.run();
-  timer.run();
+  // Blynk.run();
+  // timer.run();
 
   if (isFirstRun)
   {
