@@ -454,8 +454,8 @@ void bq769x0::shutdown()
   writeRegister(SYS_CTRL1, 0x2);
   delay(250); //Give time for IC to perform sleep sequence, minimum 250ms, the longer the time, the better
   int data = readRegister(CELLBAL1);
-  Serial.println("BMS Channel " + String(_channel) + " Shutdown");
-  Serial.println("Data Register Check : " + String(data));
+  // Serial.println("BMS Channel " + String(_channel) + " Shutdown");
+  // Serial.println("Data Register Check : " + String(data));
   if (data < 0)
   {
     _isSleep = true;
@@ -1674,7 +1674,7 @@ void bq769x0::writeRegister(byte address, int data)
 {
   if(_wire <= 0 || _wire == NULL)
   {
-    Serial.println("I2C not defined");
+    // Serial.println("I2C not defined");
     return;
   }
   if (_listener > 0)
