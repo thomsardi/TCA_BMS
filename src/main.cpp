@@ -26,7 +26,7 @@ char auth[] = "sGZwg34WR9aDxtGkJDJz4adtpwAgfzpj";
 char ssid[] = "BOLT!-7157";
 char pass[] = "sundaya2021";
 
-bq769x0 BMS[3] = {bq769x0(bq76940, BMS_I2C_ADDRESS, 7), bq769x0(bq76940, BMS_I2C_ADDRESS, 6), bq769x0(bq76940, BMS_I2C_ADDRESS, 5)};
+bq769x0 BMS[3] = {bq769x0(bq76940, BMS_I2C_ADDRESS, 0), bq769x0(bq76940, BMS_I2C_ADDRESS, 1), bq769x0(bq76940, BMS_I2C_ADDRESS, 2)};
 size_t arrSize = sizeof(BMS)/sizeof(BMS[0]);
 
 bool isFinish = false;
@@ -530,30 +530,6 @@ void loop() {
     }
     currTime = millis();
   }
-  
-  // Serial.println("======Voltage Measurement========");
-  // Serial.println("Cell Configuration : " + String(BMS.getCellConfiguration()));
-  // Serial.println("TCA Channel : " + String(BMS.getTCAChannel()));
-  // for(int i = 1; i < 16; i++)
-  // {
-  //   Serial.print("Cell Voltage " + String(i) + " : ");
-  //   Serial.println(BMS.getCellVoltage(i));
-  // }
-  // Serial.print("Pack Voltage : ");
-  // Serial.println(BMS.getBatteryVoltage());
-  // Serial.println("=================================");
-
-  // Serial.println("======Voltage Measurement========");
-  // Serial.println("Cell Configuration : " + String(BMS2.getCellConfiguration()));
-  // Serial.println("TCA Channel : " + String(BMS2.getTCAChannel()));
-  // for(int i = 1; i < 16; i++)
-  // {
-  //   Serial.print("Cell Voltage " + String(i) + " : ");
-  //   Serial.println(BMS2.getCellVoltage(i));
-  // }
-  // Serial.print("Pack Voltage : ");
-  // Serial.println(BMS2.getBatteryVoltage());
-  // Serial.println("=================================");
 
   if (serialRead())
   {
@@ -561,6 +537,7 @@ void loop() {
     checkCommand(command);
     command = "";
   }
+  checkAllBMS(arrSize);
   // delay(250);
 }
 

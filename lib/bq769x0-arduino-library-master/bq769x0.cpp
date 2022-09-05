@@ -467,6 +467,7 @@ void bq769x0::shutdown()
  */
 void bq769x0::wake()
 {
+  _isSleep = true;
   if (_bootPin >= 0)
   {
     pinMode(_bootPin, OUTPUT);
